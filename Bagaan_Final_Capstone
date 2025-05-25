@@ -1,0 +1,109 @@
+import pandas as pd
+import numpy as np
+from scipy import stats
+import statsmodels.api as sm
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+data = pd.read_csv("states_all.csv")
+
+clean_data = data.dropna()
+print("Number of data points after cleaning:", clean_data.shape[0])
+
+mean_total_revenue = np.mean(clean_data['TOTAL_REVENUE'])
+median_total_expenditure = np.median(clean_data['TOTAL_EXPENDITURE'])
+std_instruction_expenditure = np.std(clean_data['INSTRUCTION_EXPENDITURE'])
+max_grades_all = np.max(clean_data['GRADES_ALL_G'])
+min_grades_all = np.min(clean_data['GRADES_ALL_G'])
+
+print("\nNumPy Operations:")
+print("Mean Total Revenue:", mean_total_revenue)
+print("Median Total Expenditure:", median_total_expenditure)
+print("Standard Deviation of Instruction Expenditure:", std_instruction_expenditure)
+print("Max of Grades All:", max_grades_all)
+print("Min of Grades All:", min_grades_all)
+
+pearson_corr, p_value = stats.pearsonr(clean_data['TOTAL_REVENUE'], clean_data['TOTAL_EXPENDITURE'])
+print("\nSciPy Pearson Correlation:")
+print("Correlation Coefficient:", pearson_corr)
+print("P-value:", p_value)
+
+X = sm.add_constant(clean_data['TOTAL_REVENUE'])
+Y = clean_data['TOTAL_EXPENDITURE']
+model = sm.OLS(Y, X).fit()
+print("\nStatsmodels Linear Regression Summary:")
+print(model.summary())
+
+plt.figure(figsize=(14, 6))
+plt.subplot(1, 2, 1)
+sns.histplot(clean_data['TOTAL_REVENUE'], bins=30, kde=True)
+plt.title('Distribution of Total Revenue')
+
+plt.subplot(1, 2, 2)
+top_states = clean_data['STATE'].value_counts().nlargest(6).index
+sns.boxplot(data=clean_data[clean_data['STATE'].isin(top_states)],
+            x='STATE', y='INSTRUCTION_EXPENDITURE')
+plt.title('Instruction Expenditure by State')
+plt.tight_layout()
+plt.show()
+
+plt.figure(figsize=(8, 6))
+sns.regplot(x='TOTAL_REVENUE', y='TOTAL_EXPENDITURE', data=clean_data, line_kws={"color": "red"})
+plt.title('Correlation Between Total Revenue and Total Expenditure')
+plt.xlabel('Total Revenue')
+plt.ylabel('Total Expenditure')
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+columns_to_check = [
+    'TOTAL_REVENUE',
+    'TOTAL_EXPENDITURE',
+    'INSTRUCTION_EXPENDITURE',
+    'GRADES_ALL_G']
+
+def remove_outliers_iqr(df, column):
+    Q1 = df[column].quantile(0.25)
+    Q3 = df[column].quantile(0.75)
+    IQR = Q3 - Q1
+    lower_bound = Q1 - 1.5 * IQR
+    upper_bound = Q3 + 1.5 * IQR
+    return df[(df[column] >= lower_bound) & (df[column] <= upper_bound)]
+
+filtered_data = clean_data.copy()
+for col in columns_to_check:
+    filtered_data = remove_outliers_iqr(filtered_data, col)
+
+corr_instr_grades, p_instr_grades = stats.pearsonr(
+    filtered_data['INSTRUCTION_EXPENDITURE'], 
+    filtered_data['GRADES_ALL_G'])
+
+
+z = np.polyfit(filtered_data['TOTAL_EXPENDITURE'], filtered_data['GRADES_ALL_G'], 2)
+p = np.poly1d(z)
+x_vals = np.linspace(filtered_data['TOTAL_EXPENDITURE'].min(), filtered_data['TOTAL_EXPENDITURE'].max(), 100)
+y_vals = p(x_vals)
+
+plt.figure(figsize=(18, 10))
+
+plt.subplot(2, 2, 1)
+corr_matrix = filtered_data[['TOTAL_REVENUE', 'TOTAL_EXPENDITURE', 'INSTRUCTION_EXPENDITURE', 'GRADES_ALL_G']].corr()
+sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', fmt='.2f')
+plt.title('Heatmap of Key Variable Correlations')
+
+plt.subplot(2, 2, 2)
+sns.scatterplot(data=filtered_data, x='INSTRUCTION_EXPENDITURE', y='GRADES_ALL_G', hue='STATE', legend=False)
+plt.title('Instruction Expenditure vs. Grades (All)')
+
+plt.subplot(2, 1, 2)
+sns.scatterplot(x='TOTAL_EXPENDITURE', y='GRADES_ALL_G', data=filtered_data)
+plt.plot(x_vals, y_vals, color='green', label='Polynomial Fit (Degree 2)')
+plt.title('Non-Linear Correlation: Total Expenditure vs. Grades (All)')
+plt.xlabel('Total Expenditure')
+plt.ylabel('Grades All')
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+
+print(f"Correlation (Instruction Expenditure vs Grades): r = {corr_instr_grades:.3f}, p-value = {p_instr_grades:.2e}")
